@@ -1,119 +1,84 @@
-set nocompatible
-source $VIMRUNTIME/vimrc_example.vim
-source $VIMRUNTIME/mswin.vim
-behave mswin
+" General vimrc settings to make vim into a decent lightweight code editor
+" Note that you can use ':so %' to re-source your vimrc while editing it
+set nocompatible	" turn off backwards compatibility with vi
+
+" You can grab a big colorscheme pack from: https://github.com/flazz/vim-colorschemes
+" The colorschemes in question can also be previed visually at: https://vimcolorschemes.com/flazz/vim-colorschemes
+" To install colorschemes, simply copy all the .vim files into your ~/.vim
+" directory (make if needed)
 colorscheme darkblue
+
+" Code Editing Settings
+" - Note that if you place this block AFTER any spacing/coloring settigns you will get odd/inconsistent results
+" - Turning the filetype handling on applies a bunch of type-specific color/spacing settings
+syntax on			" Enable syntax highlighting
+filetype on			" Enable filetype checking
+filetype plugin on	" Enable filetype-specific plugin usage
+filetype indent on	" Enable filetype-specific indentation
+
+" Tab settings
+" - Note that you might want to remove or change these depending on how they interact with the filetype settings above
+" - Moving them above the filetype block should cause them be the defaults, unless they are overridden by particular filetype settings
 set ts=4
 set autoindent
 set smartindent
 set shiftwidth=4
 set softtabstop=4
-set nu
-set nowrap
-set guioptions+=b
 
-" ex command for toggling hex mode - define mapping if desired
-command -bar Hexmode call ToggleHex()
+" General editor settings
+set nu				" File numbering
+set nowrap			" disable wrapping by default
+set hlsearch		" highlight words as you search for them
+set incsearch		" enable incremental search highlighting
+set guioptions+=b	" Add horizontal scroll bar
+set backspace=2		" allow backspacing over whitespace
 
-" helper function to toggle hex mode
-function ToggleHex()
-  " hex mode should be considered a read-only operation
-  " save values for modified and read-only for restoration later,
-  " and clear the read-only flag for now
-  let l:modified=&mod
-  let l:oldreadonly=&readonly
-  let &readonly=0
-  let l:oldmodifiable=&modifiable
-  let &modifiable=1
-  if !exists("b:editHex") || !b:editHex
-    " save old options
-    let b:oldft=&ft
-    let b:oldbin=&bin
-    " set new options
-    setlocal binary " make sure it overrides any textwidth, etc.
-    let &ft="xxd"
-    " set status
-    let b:editHex=1
-    " switch to hex editor
-    %!xxd
-  else
-    " restore old options
-    let &ft=b:oldft
-    if !b:oldbin
-      setlocal nobinary
+" Maximum text/comment width settings.
+set textwidth=80	" Maximum line width (if automatic linebreaking is enabled)
+set formatoptions-=t	" do not automatically linebreak at textwidth
+set formatoptions-=c	" do not automatically linebreak COMMENTS at textwidth, because that's different for some reason
+set colorcolumn=80	" Add colored column to indicate maximum linewidth
+" Color column settings. Uncomment these and use :help colorcolumn to choose a good color if you don't like the default in your colorscheme
+highlight ColorColumn guibg=darkblue
+highlight ColorColumn ctermbg=darkblue
+
+
+" === BEGIN NetRW File Browser Settings ===
+" NetRW is the build-in file browser in vim
+" It can be set up to work similarly to the file explorer sidebar in most IDEs (i.e. VSCode), but it has some quirks out of the box
+" Many users prefer to use the NERDTree plugin, but it's a a bit overkill for what most people really need
+
+" General netrw file browser settings
+let g:netrw_liststyle = 3		" Tree-style file list
+let g:netrw_browse_split = 3	" Where to open new files. 1: new horizontal split. 2: new vertical split. 3: new tab. 4: previous window (where you opened netrw from)
+let g:netrw_altv = 1			" opens netrw on the left instead of the right when using a vertical split
+let g:netrw_winsize = 15		" Window size in % of screen
+let g:netrw_keepdir = 0			" Keep current directory and browsing directory synced
+
+" Fix Lexplore toggling issues
+" This will fix some issues with extra buffers piling up while using netrw
+let g:NetrwIsOpen=0
+function! ToggleNetrw()
+	" By default Lexplore/Vexplore leave a bunch of empty buffers behind
+	" Clear these out when we toggle netrw off
+    if g:NetrwIsOpen
+        let i = bufnr("$")
+        while (i >= 1)
+            if (getbufvar(i, "&filetype") == "netrw")
+                silent exe "bwipeout " . i 
+            endif
+            let i-=1
+        endwhile
+        let g:NetrwIsOpen=0
+    else
+        let g:NetrwIsOpen=1
+		" silent Lexplore " Use Lexplore here if you have a remotely modern version of vim/netrw. This should let you toggle the file explorer on and off in different tabs
+        silent Vexplore " Use Vexplore here if you have an older version of vim/netrw. This will mean you can only have the file explorer open in one tab, and you'll have to double toggle it if it's already open in another tab
     endif
-    " set status
-    let b:editHex=0
-    " return to normal editing
-    %!xxd -r
-  endif
-  " restore values for modified and read only state
-  let &mod=l:modified
-  let &readonly=l:oldreadonly
-  let &modifiable=l:oldmodifiable
 endfunction
 
+" Macro for opening Netrw
+noremap <silent> <C-E> :call ToggleNetrw()<CR>
+" === END NetRW File Browser Settings
 
-" vim -b : edit binary using xxd-format!
-augroup Binary
-  au!
-  au BufReadPre  *.bin let &bin=1
-  au BufReadPost *.bin if &bin | %!xxd
-  au BufReadPost *.bin set ft=xxd | endif
-  au BufWritePre *.bin if &bin | %!xxd -r
-  au BufWritePre *.bin endif
-  au BufWritePost *.bin if &bin | %!xxd
-  au BufWritePost *.bin set nomod | endif
-augroup END
-
-
-" autocmds to automatically enter hex mode and handle file writes properly
-if has("autocmd")
-  " vim -b : edit binary using xxd-format!
-  augroup Binary
-    au!
-
-    " set binary option for all binary files before reading them
-    au BufReadPre *.bin,*.hex setlocal binary
-
-    " if on a fresh read the buffer variable is already set, it's wrong
-    au BufReadPost *
-          \ if exists('b:editHex') && b:editHex |
-          \   let b:editHex = 0 |
-          \ endif
-
-    " convert to hex on startup for binary files automatically
-    au BufReadPost *
-          \ if &binary | Hexmode | endif
-
-    " When the text is freed, the next time the buffer is made active it will
-    " re-read the text and thus not match the correct mode, we will need to
-    " convert it again if the buffer is again loaded.
-    au BufUnload *
-          \ if getbufvar(expand("<afile>"), 'editHex') == 1 |
-          \   call setbufvar(expand("<afile>"), 'editHex', 0) |
-          \ endif
-
-    " before writing a file when editing in hex mode, convert back to non-hex
-    au BufWritePre *
-          \ if exists("b:editHex") && b:editHex && &binary |
-          \  let oldro=&ro | let &ro=0 |
-          \  let oldma=&ma | let &ma=1 |
-          \  silent exe "%!xxd -r" |
-          \  let &ma=oldma | let &ro=oldro |
-          \  unlet oldma | unlet oldro |
-          \ endif
-
-    " after writing a binary file, if we're in hex mode, restore hex mode
-    au BufWritePost *
-          \ if exists("b:editHex") && b:editHex && &binary |
-          \  let oldro=&ro | let &ro=0 |
-          \  let oldma=&ma | let &ma=1 |
-          \  silent exe "%!xxd" |
-          \  exe "set nomod" |
-          \  let &ma=oldma | let &ro=oldro |
-          \  unlet oldma | unlet oldro |
-          \ endif
-  augroup END
-endif
 
